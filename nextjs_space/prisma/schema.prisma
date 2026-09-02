@@ -1,0 +1,93 @@
+generator client {
+    provider = "prisma-client-js"
+    // Generate into Prisma's standard location. The previous absolute Linux path
+    // prevents a Windows deployment from producing a usable client.
+    binaryTargets = ["native"]
+}
+
+datasource db {
+    // The deployment target is a single Windows server. SQLite keeps the
+    // application metadata local and removes the unavailable PostgreSQL host;
+    // report data itself continues to be read from SQL Server.
+    provider = "sqlite"
+    url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String?
+  role      String   @default("USER")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  reportsCreated Report[]        @relation("ReportCreatedBy")
+  reportAccesses ReportAccess[]
+
+  @@index([role])
+}
+
+model SqlConnection {
+  id        String   @id @default(cuid())
+  name      String
+  server    String
+  port      Int      @default(1433)
+  database  String
+  username  String
+  password  String // encrypted at rest
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  reports Report[]
+}
+
+model Report {
+  id              String   @id @default(cuid())
+  name            String
+  description     String?
+  sqlQuery        String
+  sqlConnectionId String
+  createdBy       String
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  sqlConnection SqlConnection     @relation(fields: [sqlConnectionId], references: [id], onDelete: Restrict)
+  creator       User              @relation("ReportCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
+  parameters    ReportParameter[]
+  accesses      ReportAccess[]
+
+  @@index([sqlConnectionId])
+  @@index([createdBy])
+}
+
+model ReportParameter {
+  id           String        @id @default(cuid())
+  reportId     String
+  name         String
+  label        String
+  type         String        @default("TEXT")
+  defaultValue String?
+  isRequired   Boolean       @default(false)
+  displayOrder Int           @default(0)
+  options      String? // comma-separated options for SELECT type
+
+  report Report @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@index([reportId])
+}
+
+model ReportAccess {
+  id       String @id @default(cuid())
+  reportId String
+  userId   String
+
+  report Report @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([reportId, userId])
+  @@index([userId])
+  @@index([reportId])
+}
